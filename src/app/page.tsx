@@ -40,7 +40,7 @@ export default function Home() {
     
     // Play desert wind sound
     if (audioRef.current) {
-      audioRef.current.volume = 0.5;
+      audioRef.current.volume = 0.8;
       audioRef.current.play().catch(e => console.log("Audio play blocked", e));
     }
 
@@ -50,7 +50,7 @@ export default function Home() {
       setZoomStage(2);
       // Fade out wind sound after zoom is done
       if (audioRef.current) {
-        let vol = 0.5;
+        let vol = 0.8;
         const fadeOut = setInterval(() => {
           if (vol > 0.05) {
             vol -= 0.05;
@@ -138,8 +138,8 @@ export default function Home() {
   if (!hasStarted) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white" dir="rtl">
-        <h1 className="text-4xl md:text-6xl font-bold text-amber-400 mb-8 tracking-widest drop-shadow-lg">السيرة النبوية التفاعلية</h1>
-        <p className="text-xl text-neutral-300 mb-12">رحلة النور.. الخرائط الذهنية لسيرة خير البشر ﷺ</p>
+        <h1 className="text-4xl md:text-6xl font-bold text-amber-400 mb-8 tracking-widest drop-shadow-lg text-center leading-relaxed">السيرة النبوية التفاعلية</h1>
+        <p className="text-xl text-neutral-300 mb-12 text-center">رحلة النور.. الخرائط الذهنية لسيرة خير البشر ﷺ</p>
         <button 
           onClick={enterExperience}
           className="px-10 py-4 bg-amber-600 hover:bg-amber-500 text-white font-bold text-2xl rounded-full shadow-[0_0_30px_rgba(217,119,6,0.5)] transition-all transform hover:scale-105"
@@ -152,20 +152,41 @@ export default function Home() {
 
   return (
     <div 
-      className="min-h-screen bg-neutral-900 text-white p-5 font-sans flex flex-col items-center justify-center overflow-hidden" 
+      className="min-h-screen bg-[#cfa568] text-white p-5 font-sans flex flex-col items-center justify-center overflow-hidden relative" 
       onClick={() => setInfoPopup({...infoPopup, show: false})}
       dir="rtl"
     >
-      {/* Wind Sound Effect from public domain Google actions library */}
-      <audio ref={audioRef} src="https://actions.google.com/sounds/v1/weather/wind_blowing_in_the_desert.ogg" loop />
+      {/* Wind Sound Effect using a working direct URL */}
+      <audio ref={audioRef} src="https://upload.wikimedia.org/wikipedia/commons/2/2d/Howling_wind.ogg" loop />
 
+      {/* Intro Background Map simulation */}
+      {zoomStage < 2 && (
+        <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center bg-[#cfa568]">
+            <p className="text-6xl md:text-8xl font-bold text-[#8b5a2b] opacity-20">شبه الجزيرة العربية</p>
+        </div>
+      )}
+
+      {/* Main Container - Always opacity 1 so we can see the map zoom! */}
       <div 
-        className="bg-neutral-800 border border-neutral-700 rounded-xl p-5 md:p-8 shadow-2xl w-full max-w-6xl z-10 relative transition-opacity duration-1000"
-        style={{ opacity: zoomStage === 2 ? 1 : 0 }}
+        className="bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl w-full max-w-6xl z-10 relative flex flex-col"
+        style={{ 
+          // Animate the container itself from taking up the whole screen to becoming a card
+          position: zoomStage < 2 ? 'fixed' : 'relative',
+          inset: zoomStage < 2 ? '0' : 'auto',
+          margin: zoomStage < 2 ? '0' : 'auto',
+          borderRadius: zoomStage < 2 ? '0' : '0.75rem',
+          transition: 'all 4s cubic-bezier(0.25, 1, 0.5, 1)',
+          background: zoomStage < 2 ? 'transparent' : '#262626',
+          border: zoomStage < 2 ? 'none' : '1px solid #404040',
+        }}
       >
         
-        <div className="mb-6 text-center">
-          <h1 className="text-amber-400 font-bold text-2xl md:text-4xl mb-4">رحلة النور إلى ديار بني سعد</h1>
+        {/* Title and Commentary - fade in AFTER zoom */}
+        <div 
+          className="p-5 md:p-8 pb-0 text-center transition-opacity duration-1000"
+          style={{ opacity: zoomStage === 2 ? 1 : 0, display: zoomStage === 2 ? 'block' : 'none' }}
+        >
+          <h1 className="text-amber-400 font-bold text-2xl md:text-4xl mb-4 mt-4">رحلة النور إلى ديار بني سعد</h1>
           <div 
             className="text-white font-semibold text-lg md:text-xl min-h-[80px] bg-neutral-900 p-4 rounded-lg border border-neutral-700 flex items-center justify-center transition-opacity duration-300 shadow-inner"
             style={{ opacity: opacity }}
@@ -176,16 +197,26 @@ export default function Home() {
 
         {/* Map Container */}
         <div 
-          className="relative w-full aspect-video rounded-lg border-2 border-amber-600/50 overflow-hidden shadow-[0_0_40px_rgba(217,119,6,0.3)] bg-black transition-transform origin-center"
+          className="relative w-full aspect-video rounded-lg border-2 border-amber-600/50 overflow-hidden shadow-[0_0_40px_rgba(217,119,6,0.3)] bg-black transition-transform origin-center m-auto"
           style={{
-            transform: zoomStage === 1 ? 'scale(1) translateY(0)' : zoomStage === 2 ? 'scale(1) translateY(0)' : 'scale(0.2) translateY(50%)',
-            transition: 'transform 4s cubic-bezier(0.25, 1, 0.5, 1)'
+            transform: zoomStage === 1 ? 'scale(1) translateY(0)' : zoomStage === 2 ? 'scale(1) translateY(0)' : 'scale(0.1) translateY(20%)',
+            transition: 'transform 4s cubic-bezier(0.25, 1, 0.5, 1)',
+            width: zoomStage < 2 ? '100vw' : '100%',
+            height: zoomStage < 2 ? '100vh' : 'auto',
+            borderRadius: zoomStage < 2 ? '0' : '0.5rem',
+            border: zoomStage < 2 ? 'none' : '2px solid rgba(217,119,6,0.5)',
           }}
         >
           <img src="/seerah_map.jpg" alt="خريطة السيرة" className="absolute inset-0 w-full h-full object-cover object-center" />
-          <div className="absolute inset-0 bg-black/30"></div>
+          <div className="absolute inset-0 bg-black/30 transition-opacity duration-1000" style={{ opacity: zoomStage < 2 ? 0 : 1 }}></div>
           
-          <svg className="absolute inset-0 w-full h-full drop-shadow-md" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice">
+          {/* SVG Elements - Fade in after zoom */}
+          <svg 
+            className="absolute inset-0 w-full h-full drop-shadow-md transition-opacity duration-1000" 
+            viewBox="0 0 800 450" 
+            preserveAspectRatio="xMidYMid slice"
+            style={{ opacity: zoomStage === 2 ? 1 : 0 }}
+          >
             
             {/* Interactive Points */}
             <g 
@@ -231,8 +262,11 @@ export default function Home() {
           </svg>
         </div>
 
-        {/* Controls */}
-        <div className="mt-8 flex justify-center gap-4">
+        {/* Controls - fade in after zoom */}
+        <div 
+          className="p-5 md:p-8 pt-4 flex justify-center gap-4 transition-opacity duration-1000"
+          style={{ opacity: zoomStage === 2 ? 1 : 0, display: zoomStage === 2 ? 'flex' : 'none' }}
+        >
           <button 
             onClick={(e) => { e.stopPropagation(); startJourney(); }} 
             className="px-8 py-3 bg-amber-600 text-white rounded-md font-bold text-lg shadow-lg hover:bg-amber-500 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
@@ -256,13 +290,6 @@ export default function Home() {
         >
           <h3 className="text-amber-400 font-bold text-xl mb-2">{infoPopup.title}</h3>
           <p className="text-white text-sm leading-relaxed">{infoPopup.text}</p>
-        </div>
-      )}
-
-      {/* Intro Background Map simulation */}
-      {zoomStage < 2 && (
-        <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center bg-[#cfa568]">
-            <p className="text-6xl font-bold text-[#8b5a2b] opacity-20">شبه الجزيرة العربية</p>
         </div>
       )}
 
