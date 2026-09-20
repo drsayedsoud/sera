@@ -4,16 +4,50 @@ import { useState, useRef, useEffect } from "react";
 
 const DURATION = 15000; // 15 seconds
 
-const scriptText = [
-  { time: 0, text: "🎙️ الراوي: في عام الفيل، استقبلت مكة المرضعات من بادية بني سعد..." },
-  { time: 3000, text: "🎙️ أخذت حليمة السعدية الرضيع اليتيم 'محمداً' ﷺ بعد أن زهد فيه الآخرون." },
-  { time: 6000, text: "🎙️ تحركت القافلة.. وبمجرد أن أركبته حليمة على أتانها، نشطت الأتان الضعيفة وسبقت الجميع!" },
-  { time: 10000, text: "🎙️ تعجب ركب بني سعد من سرعة الأتان ببركة هذا الرضيع المبارك." },
-  { time: 14000, text: "🎙️ حلت البركة العظيمة في ديار بني سعد بمقدم النبي ﷺ." }
+// Scene Data Structure
+const SCENES = [
+  {
+    id: "bani-saad-journey",
+    title: "رحلة النور إلى ديار بني سعد",
+    mapImage: "/seerah_map.jpg",
+    regionName: "شبه الجزيرة العربية - الحجاز",
+    icon: "🫏", // Donkey
+    scriptText: [
+      { time: 0, text: "🎙️ الراوي: في عام الفيل، استقبلت مكة المرضعات من بادية بني سعد..." },
+      { time: 3000, text: "🎙️ أخذت حليمة السعدية الرضيع اليتيم 'محمداً' ﷺ بعد أن زهد فيه الآخرون." },
+      { time: 6000, text: "🎙️ تحركت القافلة.. وبمجرد أن أركبته حليمة على أتانها، نشطت الأتان الضعيفة وسبقت الجميع!" },
+      { time: 10000, text: "🎙️ تعجب ركب بني سعد من سرعة الأتان ببركة هذا الرضيع المبارك." },
+      { time: 14000, text: "🎙️ حلت البركة العظيمة في ديار بني سعد بمقدم النبي ﷺ." }
+    ],
+    pois: [
+      { id: "mecca", name: "مكة المكرمة", desc: "البلد الحرام، حيث ولد النبي ﷺ وتلقفته مرضعات بني سعد.", x: 180, y: 280 },
+      { id: "taif", name: "ديار بني سعد (الطائف)", desc: "منازل قبيلة بني سعد بن بكر، المشهورة بالفصاحة والهواء النقي.", x: 620, y: 100 }
+    ],
+    path: "M 220 280 C 350 350, 500 350, 650 150"
+  },
+  {
+    id: "chest-splitting",
+    title: "حادثة شق الصدر",
+    mapImage: "/seerah_map.jpg", // Reusing same map for prototype
+    regionName: "مضارب بني سعد",
+    icon: "✨", // Light/Angel
+    scriptText: [
+      { time: 0, text: "🎙️ الراوي: شب رسول الله ﷺ في ديار بني سعد، وكان يخرج مع أخيه من الرضاعة لرعي البهم..." },
+      { time: 4000, text: "🎙️ بينما هو يلعب مع الغلمان، أتاه جبريل عليه السلام فأخذه وصرعه." },
+      { time: 8000, text: "🎙️ فشق عن قلبه، فاستخرج منه علقة، فقال: هذا حظ الشيطان منك." },
+      { time: 12000, text: "🎙️ ثم غسله في طست من ذهب بماء زمزم، ثم لأمه (أعاده مكانه)." }
+    ],
+    pois: [
+      { id: "bani-saad-camp", name: "مضارب بني سعد", desc: "حيث وقعت حادثة شق الصدر العظيمة التي كانت تهيئة روحية للنبي ﷺ.", x: 620, y: 100 }
+    ],
+    path: "M 620 100 C 600 80, 580 120, 620 100" // A small path around Bani Saad
+  }
 ];
 
 export default function Home() {
   const [hasStarted, setHasStarted] = useState(false);
+  const [currentSceneIndex, setCurrentSceneIndex] = useState(0);
+  
   const [commentary, setCommentary] = useState("اضغط على 'ابدأ المشهد' لمشاهدة الموقف...");
   const [isAnimating, setIsAnimating] = useState(false);
   const [opacity, setOpacity] = useState(1);
@@ -27,28 +61,33 @@ export default function Home() {
   const animationRef = useRef<number>(0);
   const timeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
+  // Load saved progress on mount
   useEffect(() => {
-    // Initial position for SVG path
-    if (pathRef.current && caravanRef.current && !isAnimating) {
-      const startPoint = pathRef.current.getPointAtLength(0);
-      caravanRef.current.setAttribute("transform", `translate(${startPoint.x}, ${startPoint.y})`);
+    const savedIndex = localStorage.getItem('seerah_saved_scene');
+    if (savedIndex !== null) {
+      setCurrentSceneIndex(parseInt(savedIndex, 10));
     }
-  }, [isAnimating]);
+  }, []);
 
-  const enterExperience = () => {
-    setHasStarted(true);
-    
-    // Play desert wind sound
+  const scene = SCENES[currentSceneIndex];
+
+  // Reset states when scene changes
+  useEffect(() => {
+    if (hasStarted) {
+      setZoomStage(0);
+      resetJourney();
+      playIntro();
+    }
+  }, [currentSceneIndex, hasStarted]);
+
+  const playIntro = () => {
     if (audioRef.current) {
       audioRef.current.volume = 0.8;
-      audioRef.current.play().catch(e => console.log("Audio play blocked", e));
+      audioRef.current.play().catch(e => console.log("Audio blocked", e));
     }
-
-    // Cinematic Intro sequence
     setTimeout(() => setZoomStage(1), 100);
     setTimeout(() => {
       setZoomStage(2);
-      // Fade out wind sound after zoom is done
       if (audioRef.current) {
         let vol = 0.8;
         const fadeOut = setInterval(() => {
@@ -64,10 +103,29 @@ export default function Home() {
     }, 4000);
   };
 
+  const enterExperience = () => {
+    setHasStarted(true);
+  };
+
+  const nextScene = () => {
+    if (currentSceneIndex < SCENES.length - 1) {
+      const nextIdx = currentSceneIndex + 1;
+      setCurrentSceneIndex(nextIdx);
+      localStorage.setItem('seerah_saved_scene', nextIdx.toString());
+    }
+  };
+
+  const prevScene = () => {
+    if (currentSceneIndex > 0) {
+      const prevIdx = currentSceneIndex - 1;
+      setCurrentSceneIndex(prevIdx);
+      localStorage.setItem('seerah_saved_scene', prevIdx.toString());
+    }
+  };
+
   const animate = (startTime: number, currentTime: number) => {
     const elapsed = currentTime - startTime;
     let progress = elapsed / DURATION;
-    
     if (progress > 1) progress = 1;
     
     if (pathRef.current && caravanRef.current) {
@@ -94,15 +152,15 @@ export default function Home() {
       
       animationRef.current = requestAnimationFrame((time) => animate(time, time));
       
-      scriptText.forEach(scene => {
+      scene.scriptText.forEach(s => {
         const t1 = setTimeout(() => {
           setOpacity(0);
           const t2 = setTimeout(() => {
-            setCommentary(scene.text);
+            setCommentary(s.text);
             setOpacity(1);
           }, 300);
           timeoutsRef.current.push(t2);
-        }, scene.time);
+        }, s.time);
         timeoutsRef.current.push(t1);
       });
     }, 100);
@@ -144,7 +202,7 @@ export default function Home() {
           onClick={enterExperience}
           className="px-10 py-4 bg-amber-600 hover:bg-amber-500 text-white font-bold text-2xl rounded-full shadow-[0_0_30px_rgba(217,119,6,0.5)] transition-all transform hover:scale-105"
         >
-          ابدأ الرحلة 🧭
+          {currentSceneIndex > 0 ? "إكمال الرحلة 🧭" : "ابدأ الرحلة 🧭"}
         </button>
       </div>
     );
@@ -152,94 +210,56 @@ export default function Home() {
 
   return (
     <div 
-      className="min-h-screen bg-[#cfa568] text-white p-5 font-sans flex flex-col items-center justify-center overflow-hidden relative" 
+      className="h-screen w-screen bg-[#cfa568] text-white font-sans flex flex-col items-center justify-center overflow-hidden relative" 
       onClick={() => setInfoPopup({...infoPopup, show: false})}
       dir="rtl"
     >
-      {/* Wind Sound Effect using a working direct URL */}
       <audio ref={audioRef} src="https://upload.wikimedia.org/wikipedia/commons/2/2d/Howling_wind.ogg" loop />
 
       {/* Intro Background Map simulation */}
       {zoomStage < 2 && (
         <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center bg-[#cfa568]">
-            <p className="text-6xl md:text-8xl font-bold text-[#8b5a2b] opacity-20">شبه الجزيرة العربية</p>
+            <p className="text-6xl md:text-8xl font-bold text-[#8b5a2b] opacity-20">{scene.regionName}</p>
         </div>
       )}
 
-      {/* Main Container - Always opacity 1 so we can see the map zoom! */}
+      {/* FULL SCREEN MAP CONTAINER */}
       <div 
-        className="bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl w-full max-w-6xl z-10 relative flex flex-col"
+        className="w-full h-full z-10 relative flex flex-col items-center"
         style={{ 
-          // Animate the container itself from taking up the whole screen to becoming a card
-          position: zoomStage < 2 ? 'fixed' : 'relative',
-          inset: zoomStage < 2 ? '0' : 'auto',
-          margin: zoomStage < 2 ? '0' : 'auto',
-          borderRadius: zoomStage < 2 ? '0' : '0.75rem',
+          position: 'absolute',
+          inset: '0',
           transition: 'all 4s cubic-bezier(0.25, 1, 0.5, 1)',
-          background: zoomStage < 2 ? 'transparent' : '#262626',
-          border: zoomStage < 2 ? 'none' : '1px solid #404040',
         }}
       >
-        
-        {/* Title and Commentary - fade in AFTER zoom */}
         <div 
-          className="p-5 md:p-8 pb-0 text-center transition-opacity duration-1000"
-          style={{ opacity: zoomStage === 2 ? 1 : 0, display: zoomStage === 2 ? 'block' : 'none' }}
-        >
-          <h1 className="text-amber-400 font-bold text-2xl md:text-4xl mb-4 mt-4">رحلة النور إلى ديار بني سعد</h1>
-          <div 
-            className="text-white font-semibold text-lg md:text-xl min-h-[80px] bg-neutral-900 p-4 rounded-lg border border-neutral-700 flex items-center justify-center transition-opacity duration-300 shadow-inner"
-            style={{ opacity: opacity }}
-          >
-            {commentary}
-          </div>
-        </div>
-
-        {/* Map Container */}
-        <div 
-          className="relative w-full aspect-video rounded-lg border-2 border-amber-600/50 overflow-hidden shadow-[0_0_40px_rgba(217,119,6,0.3)] bg-black transition-transform origin-center m-auto"
+          className="relative w-full h-full overflow-hidden bg-black transition-transform origin-center"
           style={{
-            transform: zoomStage === 1 ? 'scale(1) translateY(0)' : zoomStage === 2 ? 'scale(1) translateY(0)' : 'scale(0.1) translateY(20%)',
+            transform: zoomStage === 1 ? 'scale(1)' : zoomStage === 2 ? 'scale(1)' : 'scale(0.1)',
             transition: 'transform 4s cubic-bezier(0.25, 1, 0.5, 1)',
-            width: zoomStage < 2 ? '100vw' : '100%',
-            height: zoomStage < 2 ? '100vh' : 'auto',
-            borderRadius: zoomStage < 2 ? '0' : '0.5rem',
-            border: zoomStage < 2 ? 'none' : '2px solid rgba(217,119,6,0.5)',
+            opacity: zoomStage < 2 ? 0.3 : 1
           }}
         >
-          <img src="/seerah_map.jpg" alt="خريطة السيرة" className="absolute inset-0 w-full h-full object-cover object-center" />
-          <div className="absolute inset-0 bg-black/30 transition-opacity duration-1000" style={{ opacity: zoomStage < 2 ? 0 : 1 }}></div>
+          <img src={scene.mapImage} alt="خريطة السيرة" className="absolute inset-0 w-full h-full object-cover object-center" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
           
-          {/* SVG Elements - Fade in after zoom */}
-          <svg 
-            className="absolute inset-0 w-full h-full drop-shadow-md transition-opacity duration-1000" 
-            viewBox="0 0 800 450" 
-            preserveAspectRatio="xMidYMid slice"
-            style={{ opacity: zoomStage === 2 ? 1 : 0 }}
-          >
-            
-            {/* Interactive Points */}
-            <g 
-              transform="translate(180, 280)" 
-              className="cursor-pointer hover:opacity-80 transition-opacity" 
-              onClick={(e) => showInfo(e, "مكة المكرمة", "البلد الحرام، حيث ولد النبي ﷺ وتلقفته مرضعات بني سعد.")}
-            >
-              <circle cx="0" cy="0" r="40" fill="transparent" />
-            </g>
-            
-            <g 
-              transform="translate(620, 100)" 
-              className="cursor-pointer hover:opacity-80 transition-opacity" 
-              onClick={(e) => showInfo(e, "ديار بني سعد (الطائف)", "منازل قبيلة بني سعد بن بكر، المشهورة بالفصاحة والهواء النقي.")}
-            >
-              <circle cx="0" cy="0" r="40" fill="transparent" />
-            </g>
+          <svg className="absolute inset-0 w-full h-full drop-shadow-md" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice">
+            {scene.pois.map((poi) => (
+              <g 
+                key={poi.id}
+                transform={`translate(${poi.x}, ${poi.y})`} 
+                className="cursor-pointer hover:opacity-80 transition-opacity" 
+                onClick={(e) => showInfo(e, poi.name, poi.desc)}
+              >
+                <circle cx="0" cy="0" r="30" fill="rgba(253, 224, 71, 0.2)" stroke="#fde047" strokeWidth="2" />
+                <circle cx="0" cy="0" r="5" fill="#fde047" />
+                <text x="0" y="25" fontSize="12" fill="white" textAnchor="middle" fontWeight="bold">{poi.name}</text>
+              </g>
+            ))}
 
-            {/* Route Path */}
             <path 
-              id="routePath"
               ref={pathRef}
-              d="M 220 280 C 350 350, 500 350, 650 150" 
+              d={scene.path}
               fill="none" 
               stroke="#fde047" 
               strokeWidth="4" 
@@ -247,49 +267,84 @@ export default function Home() {
               opacity="0.6"
             />
             
-            {/* Caravan Group */}
             <g ref={caravanRef} style={{ visibility: isVisible ? 'visible' : 'hidden' }}>
-              {/* Glowing Light (Prophet PBUH) */}
               <circle cx="0" cy="-10" r="30" fill="#fde047" opacity="0.8">
                 <animate attributeName="r" values="30;45;30" dur="1.5s" repeatCount="indefinite" />
                 <animate attributeName="opacity" values="0.5;0.9;0.5" dur="1.5s" repeatCount="indefinite" />
               </circle>
               <circle cx="0" cy="-10" r="12" fill="#ffffff" style={{ filter: 'drop-shadow(0 0 8px white)' }} />
-              
-              {/* Donkey icon instead of camel */}
-              <text x="0" y="5" fontSize="40" textAnchor="middle" dominantBaseline="middle">🫏</text>
+              <text x="0" y="5" fontSize="40" textAnchor="middle" dominantBaseline="middle">{scene.icon}</text>
             </g>
           </svg>
         </div>
 
-        {/* Controls - fade in after zoom */}
+        {/* HUD OVERLAY - Title & Subtitles */}
         <div 
-          className="p-5 md:p-8 pt-4 flex justify-center gap-4 transition-opacity duration-1000"
-          style={{ opacity: zoomStage === 2 ? 1 : 0, display: zoomStage === 2 ? 'flex' : 'none' }}
+          className="absolute top-10 w-full px-5 text-center transition-opacity duration-1000 z-20 pointer-events-none"
+          style={{ opacity: zoomStage === 2 ? 1 : 0 }}
         >
-          <button 
-            onClick={(e) => { e.stopPropagation(); startJourney(); }} 
-            className="px-8 py-3 bg-amber-600 text-white rounded-md font-bold text-lg shadow-lg hover:bg-amber-500 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
+          <h1 className="text-amber-400 font-extrabold text-3xl md:text-5xl mb-6 drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">{scene.title}</h1>
+          <div 
+            className="text-white font-bold text-xl md:text-2xl min-h-[80px] bg-black/60 backdrop-blur-sm p-4 rounded-xl border border-white/10 max-w-4xl mx-auto shadow-2xl transition-opacity duration-300"
+            style={{ opacity: opacity }}
           >
-            ▶️ ابدأ المشهد
-          </button>
-          <button 
-            onClick={(e) => { e.stopPropagation(); resetJourney(); }} 
-            className="px-8 py-3 border-2 border-neutral-600 text-neutral-300 rounded-md font-bold text-lg shadow-sm hover:bg-neutral-700 transition-colors focus:outline-none focus:ring-2 focus:ring-neutral-400 cursor-pointer"
-          >
-            🔄 إعادة
-          </button>
+            {commentary}
+          </div>
         </div>
+
+        {/* BOTTOM CONTROLS OVERLAY */}
+        <div 
+          className="absolute bottom-10 w-full px-5 flex flex-col items-center gap-6 transition-opacity duration-1000 z-20"
+          style={{ opacity: zoomStage === 2 ? 1 : 0 }}
+        >
+          {/* Main Actions */}
+          <div className="flex justify-center gap-4">
+            <button 
+              onClick={(e) => { e.stopPropagation(); startJourney(); }} 
+              className="px-8 py-3 bg-amber-600 text-white rounded-full font-bold text-lg shadow-lg hover:bg-amber-500 transition-colors"
+            >
+              ▶️ تشغيل المشهد
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); resetJourney(); }} 
+              className="px-8 py-3 bg-black/50 border border-white/20 text-white rounded-full font-bold text-lg shadow-sm hover:bg-black/70 transition-colors"
+            >
+              🔄 إعادة المشهد
+            </button>
+          </div>
+
+          {/* Navigation */}
+          <div className="flex items-center gap-4 w-full max-w-4xl justify-between border-t border-white/20 pt-4">
+            <button 
+              onClick={(e) => { e.stopPropagation(); prevScene(); }}
+              disabled={currentSceneIndex === 0}
+              className={`px-6 py-2 rounded-lg font-bold transition-colors ${currentSceneIndex === 0 ? 'opacity-50 cursor-not-allowed bg-transparent text-gray-500' : 'bg-neutral-800 text-white hover:bg-neutral-700'}`}
+            >
+              ◀ المشهد السابق
+            </button>
+            <span className="text-neutral-400 font-mono">
+              مشهد {currentSceneIndex + 1} من {SCENES.length}
+            </span>
+            <button 
+              onClick={(e) => { e.stopPropagation(); nextScene(); }}
+              disabled={currentSceneIndex === SCENES.length - 1}
+              className={`px-6 py-2 rounded-lg font-bold transition-colors ${currentSceneIndex === SCENES.length - 1 ? 'opacity-50 cursor-not-allowed bg-transparent text-gray-500' : 'bg-amber-600 text-white hover:bg-amber-500 shadow-[0_0_15px_rgba(217,119,6,0.4)]'}`}
+            >
+              المشهد التالي ▶
+            </button>
+          </div>
+        </div>
+
       </div>
 
       {/* Info Popup */}
       {infoPopup.show && (
         <div 
-          className="fixed z-50 bg-neutral-800 border border-amber-500 rounded-lg p-4 shadow-2xl max-w-sm pointer-events-none transform -translate-x-1/2 -translate-y-1/2"
+          className="fixed z-50 bg-neutral-900 border border-amber-500 rounded-xl p-5 shadow-2xl max-w-sm pointer-events-none transform -translate-x-1/2 -translate-y-1/2"
           style={{ left: infoPopup.x, top: infoPopup.y }}
         >
           <h3 className="text-amber-400 font-bold text-xl mb-2">{infoPopup.title}</h3>
-          <p className="text-white text-sm leading-relaxed">{infoPopup.text}</p>
+          <p className="text-white text-md leading-relaxed">{infoPopup.text}</p>
         </div>
       )}
 
