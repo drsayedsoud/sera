@@ -82,24 +82,12 @@ export default function Home() {
 
   const playIntro = () => {
     if (audioRef.current) {
-      audioRef.current.volume = 0.8;
+      audioRef.current.volume = 0.3;
       audioRef.current.play().catch(e => console.log("Audio blocked", e));
     }
     setTimeout(() => setZoomStage(1), 100);
     setTimeout(() => {
       setZoomStage(2);
-      if (audioRef.current) {
-        let vol = 0.8;
-        const fadeOut = setInterval(() => {
-          if (vol > 0.05) {
-            vol -= 0.05;
-            audioRef.current!.volume = vol;
-          } else {
-            audioRef.current!.pause();
-            clearInterval(fadeOut);
-          }
-        }, 200);
-      }
     }, 4000);
   };
 
