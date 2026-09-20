@@ -13,29 +13,56 @@ const scriptText = [
 ];
 
 export default function Home() {
+  const [hasStarted, setHasStarted] = useState(false);
   const [commentary, setCommentary] = useState("اضغط على 'ابدأ المشهد' لمشاهدة الموقف...");
   const [isAnimating, setIsAnimating] = useState(false);
   const [opacity, setOpacity] = useState(1);
   const [isVisible, setIsVisible] = useState(false);
-  const [zoomStage, setZoomStage] = useState(0);
+  const [zoomStage, setZoomStage] = useState(0); // 0: Pre-start, 1: Zooming, 2: Arrived
   const [infoPopup, setInfoPopup] = useState<{show: boolean, title: string, text: string, x: number, y: number}>({show: false, title: "", text: "", x: 0, y: 0});
   
   const pathRef = useRef<SVGPathElement>(null);
   const caravanRef = useRef<SVGGElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const animationRef = useRef<number>(0);
   const timeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
   useEffect(() => {
-    // Cinematic Intro: zoom from wide to detail
-    setTimeout(() => setZoomStage(1), 500);
-    setTimeout(() => setZoomStage(2), 3500);
-
-    // Initial position
+    // Initial position for SVG path
     if (pathRef.current && caravanRef.current && !isAnimating) {
       const startPoint = pathRef.current.getPointAtLength(0);
       caravanRef.current.setAttribute("transform", `translate(${startPoint.x}, ${startPoint.y})`);
     }
   }, [isAnimating]);
+
+  const enterExperience = () => {
+    setHasStarted(true);
+    
+    // Play desert wind sound
+    if (audioRef.current) {
+      audioRef.current.volume = 0.5;
+      audioRef.current.play().catch(e => console.log("Audio play blocked", e));
+    }
+
+    // Cinematic Intro sequence
+    setTimeout(() => setZoomStage(1), 100);
+    setTimeout(() => {
+      setZoomStage(2);
+      // Fade out wind sound after zoom is done
+      if (audioRef.current) {
+        let vol = 0.5;
+        const fadeOut = setInterval(() => {
+          if (vol > 0.05) {
+            vol -= 0.05;
+            audioRef.current!.volume = vol;
+          } else {
+            audioRef.current!.pause();
+            clearInterval(fadeOut);
+          }
+        }, 200);
+      }
+    }, 4000);
+  };
 
   const animate = (startTime: number, currentTime: number) => {
     const elapsed = currentTime - startTime;
@@ -99,8 +126,6 @@ export default function Home() {
 
   const showInfo = (e: React.MouseEvent, title: string, text: string) => {
     e.stopPropagation();
-    const rect = (e.target as Element).getBoundingClientRect();
-    // simple offset positioning
     setInfoPopup({
       show: true,
       title,
@@ -110,13 +135,34 @@ export default function Home() {
     });
   };
 
+  if (!hasStarted) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white" dir="rtl">
+        <h1 className="text-4xl md:text-6xl font-bold text-amber-400 mb-8 tracking-widest drop-shadow-lg">السيرة النبوية التفاعلية</h1>
+        <p className="text-xl text-neutral-300 mb-12">رحلة النور.. الخرائط الذهنية لسيرة خير البشر ﷺ</p>
+        <button 
+          onClick={enterExperience}
+          className="px-10 py-4 bg-amber-600 hover:bg-amber-500 text-white font-bold text-2xl rounded-full shadow-[0_0_30px_rgba(217,119,6,0.5)] transition-all transform hover:scale-105"
+        >
+          ابدأ الرحلة 🧭
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div 
       className="min-h-screen bg-neutral-900 text-white p-5 font-sans flex flex-col items-center justify-center overflow-hidden" 
       onClick={() => setInfoPopup({...infoPopup, show: false})}
+      dir="rtl"
     >
+      {/* Wind Sound Effect from public domain Google actions library */}
+      <audio ref={audioRef} src="https://actions.google.com/sounds/v1/weather/wind_blowing_in_the_desert.ogg" loop />
 
-      <div className="bg-neutral-800 border border-neutral-700 rounded-xl p-5 md:p-8 shadow-2xl w-full max-w-6xl z-10 relative">
+      <div 
+        className="bg-neutral-800 border border-neutral-700 rounded-xl p-5 md:p-8 shadow-2xl w-full max-w-6xl z-10 relative transition-opacity duration-1000"
+        style={{ opacity: zoomStage === 2 ? 1 : 0 }}
+      >
         
         <div className="mb-6 text-center">
           <h1 className="text-amber-400 font-bold text-2xl md:text-4xl mb-4">رحلة النور إلى ديار بني سعد</h1>
@@ -132,9 +178,8 @@ export default function Home() {
         <div 
           className="relative w-full aspect-video rounded-lg border-2 border-amber-600/50 overflow-hidden shadow-[0_0_40px_rgba(217,119,6,0.3)] bg-black transition-transform origin-center"
           style={{
-            transform: zoomStage === 0 ? 'scale(0.3) translateY(20%)' : 'scale(1) translateY(0)',
-            transition: 'transform 3s cubic-bezier(0.25, 1, 0.5, 1)',
-            opacity: zoomStage === 0 ? 0.3 : 1
+            transform: zoomStage === 1 ? 'scale(1) translateY(0)' : zoomStage === 2 ? 'scale(1) translateY(0)' : 'scale(0.2) translateY(50%)',
+            transition: 'transform 4s cubic-bezier(0.25, 1, 0.5, 1)'
           }}
         >
           <img src="/seerah_map.jpg" alt="خريطة السيرة" className="absolute inset-0 w-full h-full object-cover object-center" />
@@ -214,11 +259,12 @@ export default function Home() {
         </div>
       )}
 
-      {/* Intro Overlay Background Map simulation */}
-      <div 
-        className="fixed inset-0 pointer-events-none transition-opacity duration-1000 z-0 bg-[#cfa568]"
-        style={{ opacity: zoomStage === 2 ? 0 : 0.5 }}
-      ></div>
+      {/* Intro Background Map simulation */}
+      {zoomStage < 2 && (
+        <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center bg-[#cfa568]">
+            <p className="text-6xl font-bold text-[#8b5a2b] opacity-20">شبه الجزيرة العربية</p>
+        </div>
+      )}
 
     </div>
   );
