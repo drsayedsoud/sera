@@ -1,114 +1,75 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import Map, { Source, Layer, Marker, MapRef } from "react-map-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
+import * as turf from "@turf/turf";
 
-const DURATION = 15000; // 15 seconds
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
-// Scene Data Structure
-const SCENES = [
-  {
-    id: "bani-saad-journey",
-    title: "رحلة النور إلى ديار بني سعد",
-    mapImage: "/seerah_map_realistic.jpg",
-    regionName: "شبه الجزيرة العربية - الحجاز",
-    icon: "🫏", // Donkey
-    scriptText: [
-      { time: 0, text: "🎙️ الراوي: في عام الفيل، استقبلت مكة المرضعات من بادية بني سعد..." },
-      { time: 3000, text: "🎙️ أخذت حليمة السعدية الرضيع اليتيم 'محمداً' ﷺ بعد أن زهد فيه الآخرون." },
-      { time: 6000, text: "🎙️ تحركت القافلة.. وبمجرد أن أركبته حليمة على أتانها، نشطت الأتان الضعيفة وسبقت الجميع!" },
-      { time: 10000, text: "🎙️ تعجب ركب بني سعد من سرعة الأتان ببركة هذا الرضيع المبارك." },
-      { time: 14000, text: "🎙️ حلت البركة العظيمة في ديار بني سعد بمقدم النبي ﷺ." }
-    ],
-    pois: [
-      { id: "mecca", name: "مكة المكرمة", desc: "البلد الحرام، حيث ولد النبي ﷺ وتلقفته مرضعات بني سعد.", x: 200, y: 220 },
-      { id: "taif", name: "ديار بني سعد (الطائف)", desc: "منازل قبيلة بني سعد بن بكر، المشهورة بالفصاحة والهواء النقي.", x: 700, y: 150 }
-    ],
-    path: "M 200 220 C 300 350, 500 400, 700 150"
-  },
-  {
-    id: "chest-splitting",
-    title: "حادثة شق الصدر",
-    mapImage: "/seerah_map.jpg", // Reusing same map for prototype
-    regionName: "مضارب بني سعد",
-    icon: "✨", // Light/Angel
-    scriptText: [
-      { time: 0, text: "🎙️ الراوي: شب رسول الله ﷺ في ديار بني سعد، وكان يخرج مع أخيه من الرضاعة لرعي البهم..." },
-      { time: 4000, text: "🎙️ بينما هو يلعب مع الغلمان، أتاه جبريل عليه السلام فأخذه وصرعه." },
-      { time: 8000, text: "🎙️ فشق عن قلبه، فاستخرج منه علقة، فقال: هذا حظ الشيطان منك." },
-      { time: 12000, text: "🎙️ ثم غسله في طست من ذهب بماء زمزم، ثم لأمه (أعاده مكانه)." }
-    ],
-    pois: [
-      { id: "bani-saad-camp", name: "مضارب بني سعد", desc: "حيث وقعت حادثة شق الصدر العظيمة التي كانت تهيئة روحية للنبي ﷺ.", x: 620, y: 100 }
-    ],
-    path: "M 620 100 C 600 80, 580 120, 620 100" // A small path around Bani Saad
-  }
+const MECCA: [number, number] = [39.8262, 21.4225];
+const TAIF: [number, number] = [40.4062, 21.2703];
+
+// Create a realistic winding curved path through the mountains
+const routeLine = turf.lineString([MECCA, [40.0, 21.40], [40.2, 21.35], TAIF]);
+const curvedRoute = turf.bezierSpline(routeLine, { resolution: 10000 });
+const ROUTE_LENGTH = turf.length(curvedRoute); // in kilometers
+
+const DURATION = 20000; // 20 seconds for the journey animation
+
+const scriptText = [
+  { time: 0, text: "🎙️ الراوي: تحركت القافلة المكونة من 10 حمير وجملين من وادي مكة..." },
+  { time: 4000, text: "🎙️ أخذت حليمة الرضيع اليتيم 'محمداً' ﷺ، وركبت أتانها القمراء الضعيفة." },
+  { time: 8000, text: "🎙️ تشق القافلة طريقها بين جبال الحجاز الوعرة باتجاه الطائف." },
+  { time: 13000, text: "🎙️ ببركة النبي ﷺ، نشطت الأتان وسبقت القافلة كلها وسط ذهول نساء بني سعد!" },
+  { time: 18000, text: "🎙️ حلت البركة العظيمة في ديار بني سعد بمقدم النبي ﷺ." }
 ];
 
 export default function Home() {
-  const [hasStarted, setHasStarted] = useState(false);
-  const [currentSceneIndex, setCurrentSceneIndex] = useState(0);
-  
-  const [commentary, setCommentary] = useState("اضغط على 'ابدأ المشهد' لمشاهدة الموقف...");
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [opacity, setOpacity] = useState(1);
-  const [isVisible, setIsVisible] = useState(false);
-  const [zoomStage, setZoomStage] = useState(0); // 0: Pre-start, 1: Zooming, 2: Arrived
-  const [infoPopup, setInfoPopup] = useState<{show: boolean, title: string, text: string, x: number, y: number}>({show: false, title: "", text: "", x: 0, y: 0});
-  
-  const pathRef = useRef<SVGPathElement>(null);
-  const caravanRef = useRef<SVGGElement>(null);
+  const mapRef = useRef<MapRef>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const animationRef = useRef<number>(0);
   const timeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
-  // Load saved progress on mount
-  useEffect(() => {
-    const savedIndex = localStorage.getItem('seerah_saved_scene');
-    if (savedIndex !== null) {
-      setCurrentSceneIndex(parseInt(savedIndex, 10));
-    }
-  }, []);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [commentary, setCommentary] = useState("اضغط على 'ابدأ المشهد' لمرافقة القافلة في الطيران 🚁...");
+  const [opacity, setOpacity] = useState(1);
+  const [isAnimating, setIsAnimating] = useState(false);
+  
+  const [caravanPos, setCaravanPos] = useState<[number, number]>(MECCA);
+  const [zoomStage, setZoomStage] = useState(0); // 0: Start, 1: Journey
+  const [infoPopup, setInfoPopup] = useState<{show: boolean, title: string, text: string}>({show: false, title: "", text: ""});
 
-  const scene = SCENES[currentSceneIndex];
-
-  // Reset states when scene changes
-  useEffect(() => {
-    if (hasStarted) {
-      setZoomStage(0);
-      resetJourney();
-      playIntro();
-    }
-  }, [currentSceneIndex, hasStarted]);
-
-  const playIntro = () => {
+  const enterExperience = () => {
+    setHasStarted(true);
     if (audioRef.current) {
       audioRef.current.volume = 0.3;
       audioRef.current.play().catch(e => console.log("Audio blocked", e));
     }
-    setTimeout(() => setZoomStage(1), 100);
+  };
+
+  const startJourney = () => {
+    if (isAnimating) return;
+    resetJourney();
+    setZoomStage(1);
+    
+    // Slight delay before movement starts to let camera zoom down to Mecca
     setTimeout(() => {
-      setZoomStage(2);
-    }, 4000);
-  };
-
-  const enterExperience = () => {
-    setHasStarted(true);
-  };
-
-  const nextScene = () => {
-    if (currentSceneIndex < SCENES.length - 1) {
-      const nextIdx = currentSceneIndex + 1;
-      setCurrentSceneIndex(nextIdx);
-      localStorage.setItem('seerah_saved_scene', nextIdx.toString());
-    }
-  };
-
-  const prevScene = () => {
-    if (currentSceneIndex > 0) {
-      const prevIdx = currentSceneIndex - 1;
-      setCurrentSceneIndex(prevIdx);
-      localStorage.setItem('seerah_saved_scene', prevIdx.toString());
-    }
+      setIsAnimating(true);
+      animationRef.current = requestAnimationFrame((time) => animate(time, time));
+      
+      scriptText.forEach(scene => {
+        const t1 = setTimeout(() => {
+          setOpacity(0);
+          const t2 = setTimeout(() => {
+            setCommentary(scene.text);
+            setOpacity(1);
+          }, 300);
+          timeoutsRef.current.push(t2);
+        }, scene.time);
+        timeoutsRef.current.push(t1);
+      });
+    }, 2000);
   };
 
   const animate = (startTime: number, currentTime: number) => {
@@ -116,42 +77,40 @@ export default function Home() {
     let progress = elapsed / DURATION;
     if (progress > 1) progress = 1;
     
-    if (pathRef.current && caravanRef.current) {
-      const pathLength = pathRef.current.getTotalLength();
-      const point = pathRef.current.getPointAtLength(progress * pathLength);
-      caravanRef.current.setAttribute("transform", `translate(${point.x}, ${point.y})`);
+    // Calculate current position along the route
+    const distanceToTravel = ROUTE_LENGTH * progress;
+    const currentPoint = turf.along(curvedRoute, distanceToTravel).geometry.coordinates as [number, number];
+    setCaravanPos(currentPoint);
+
+    // Calculate bearing (direction) to look ahead
+    const aheadPoint = turf.along(curvedRoute, Math.min(distanceToTravel + 0.5, ROUTE_LENGTH)).geometry.coordinates;
+    const bearing = turf.bearing(turf.point(currentPoint), turf.point(aheadPoint));
+
+    // Fly camera closely behind the caravan
+    if (mapRef.current) {
+      mapRef.current.jumpTo({
+        center: currentPoint,
+        zoom: 12.5, // Zoomed in closely
+        pitch: 75,  // Highly tilted to see the 3D mountains
+        bearing: bearing
+      });
     }
-    
+
     if (progress < 1) {
       animationRef.current = requestAnimationFrame((time) => animate(startTime, time));
     } else {
       setIsAnimating(false);
+      // Final cinematic orbit around Taif
+      if (mapRef.current) {
+        mapRef.current.easeTo({
+          center: TAIF,
+          zoom: 11,
+          pitch: 60,
+          bearing: bearing + 90,
+          duration: 5000
+        });
+      }
     }
-  };
-
-  const startJourney = () => {
-    if (isAnimating) return;
-    resetJourney();
-    setInfoPopup({ ...infoPopup, show: false });
-    
-    setTimeout(() => {
-      setIsVisible(true);
-      setIsAnimating(true);
-      
-      animationRef.current = requestAnimationFrame((time) => animate(time, time));
-      
-      scene.scriptText.forEach(s => {
-        const t1 = setTimeout(() => {
-          setOpacity(0);
-          const t2 = setTimeout(() => {
-            setCommentary(s.text);
-            setOpacity(1);
-          }, 300);
-          timeoutsRef.current.push(t2);
-        }, s.time);
-        timeoutsRef.current.push(t1);
-      });
-    }, 100);
   };
 
   const resetJourney = () => {
@@ -160,179 +119,185 @@ export default function Home() {
     timeoutsRef.current.forEach(t => clearTimeout(t));
     timeoutsRef.current = [];
     
-    setIsVisible(false);
-    if (pathRef.current && caravanRef.current) {
-      const startPoint = pathRef.current.getPointAtLength(0);
-      caravanRef.current.setAttribute("transform", `translate(${startPoint.x}, ${startPoint.y})`);
-    }
-    
+    setCaravanPos(MECCA);
     setOpacity(1);
-    setCommentary("اضغط على 'ابدأ المشهد' لمشاهدة الموقف...");
+    setCommentary("اضغط على 'ابدأ المشهد' لمرافقة القافلة في الطيران 🚁...");
+
+    // Reset Camera to wide shot of Mecca
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: MECCA,
+        zoom: 10,
+        pitch: 45,
+        bearing: 0,
+        duration: 2000
+      });
+    }
   };
 
-  const showInfo = (e: React.MouseEvent, title: string, text: string) => {
-    e.stopPropagation();
-    setInfoPopup({
-      show: true,
-      title,
-      text,
-      x: e.clientX,
-      y: e.clientY - 100
-    });
+  const showInfo = (title: string, text: string) => {
+    setInfoPopup({ show: true, title, text });
   };
 
   if (!hasStarted) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white" dir="rtl">
-        <h1 className="text-4xl md:text-6xl font-bold text-amber-400 mb-8 tracking-widest drop-shadow-lg text-center leading-relaxed">السيرة النبوية التفاعلية</h1>
-        <p className="text-xl text-neutral-300 mb-12 text-center">رحلة النور.. الخرائط الذهنية لسيرة خير البشر ﷺ</p>
+        <h1 className="text-4xl md:text-6xl font-bold text-amber-400 mb-8 tracking-widest drop-shadow-lg text-center leading-relaxed">السيرة النبوية التفاعلية 3D</h1>
+        <p className="text-xl text-neutral-300 mb-12 text-center max-w-2xl leading-relaxed">
+          انضم إلينا في أول تجربة سينمائية تطير بك فوق التضاريس الحقيقية ثلاثية الأبعاد للجزيرة العربية، وتتبع خطى الحبيب ﷺ.
+        </p>
         <button 
           onClick={enterExperience}
           className="px-10 py-4 bg-amber-600 hover:bg-amber-500 text-white font-bold text-2xl rounded-full shadow-[0_0_30px_rgba(217,119,6,0.5)] transition-all transform hover:scale-105"
         >
-          {currentSceneIndex > 0 ? "إكمال الرحلة 🧭" : "ابدأ الرحلة 🧭"}
+          ابدأ الرحلة 🧭
         </button>
       </div>
     );
   }
 
   return (
-    <div 
-      className="h-screen w-screen bg-[#cfa568] text-white font-sans flex flex-col items-center justify-center overflow-hidden relative" 
-      onClick={() => setInfoPopup({...infoPopup, show: false})}
-      dir="rtl"
-    >
+    <div className="h-screen w-screen bg-black text-white font-sans flex flex-col overflow-hidden relative" dir="rtl">
       <audio ref={audioRef} src="https://upload.wikimedia.org/wikipedia/commons/2/2d/Howling_wind.ogg" loop />
 
-      {/* Intro Background Map simulation */}
-      {zoomStage < 2 && (
-        <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center bg-[#cfa568]">
-            <p className="text-6xl md:text-8xl font-bold text-[#8b5a2b] opacity-20">{scene.regionName}</p>
-        </div>
-      )}
-
-      {/* FULL SCREEN MAP CONTAINER */}
-      <div 
-        className="w-full h-full z-10 relative flex flex-col items-center"
-        style={{ 
-          position: 'absolute',
-          inset: '0',
-          transition: 'all 4s cubic-bezier(0.25, 1, 0.5, 1)',
-        }}
-      >
-        <div 
-          className="relative w-full h-full overflow-hidden bg-black transition-transform origin-center"
-          style={{
-            transform: zoomStage === 1 ? 'scale(1)' : zoomStage === 2 ? 'scale(1)' : 'scale(0.1)',
-            transition: 'transform 4s cubic-bezier(0.25, 1, 0.5, 1)',
-            opacity: zoomStage < 2 ? 0.3 : 1
+      {/* 3D Map Container */}
+      <div className="absolute inset-0 w-full h-full z-0">
+        <Map
+          ref={mapRef}
+          mapboxAccessToken={MAPBOX_TOKEN}
+          initialViewState={{
+            longitude: MECCA[0],
+            latitude: MECCA[1],
+            zoom: 7, // Starts Wide
+            pitch: 60,
+            bearing: -20
           }}
+          mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
+          terrain={{ source: "mapbox-dem", exaggeration: 1.5 }}
+          projection={{ name: "globe" }} // Renders as a 3D globe when zoomed out
         >
-          <img src={scene.mapImage} alt="خريطة السيرة" className="absolute inset-0 w-full h-full object-cover object-center" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-          
-          <svg className="absolute inset-0 w-full h-full drop-shadow-md" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice">
-            {scene.pois.map((poi) => (
-              <g 
-                key={poi.id}
-                transform={`translate(${poi.x}, ${poi.y})`} 
-                className="cursor-pointer hover:opacity-80 transition-opacity" 
-                onClick={(e) => showInfo(e, poi.name, poi.desc)}
-              >
-                <circle cx="0" cy="0" r="30" fill="rgba(253, 224, 71, 0.2)" stroke="#fde047" strokeWidth="2" />
-                <circle cx="0" cy="0" r="5" fill="#fde047" />
-                <text x="0" y="25" fontSize="12" fill="white" textAnchor="middle" fontWeight="bold">{poi.name}</text>
-              </g>
-            ))}
+          {/* 3D Terrain Data Source */}
+          <Source
+            id="mapbox-dem"
+            type="raster-dem"
+            url="mapbox://mapbox.mapbox-terrain-dem-v1"
+            tileSize={512}
+            maxzoom={14}
+          />
 
-            <path 
-              ref={pathRef}
-              d={scene.path}
-              fill="none" 
-              stroke="#fde047" 
-              strokeWidth="4" 
-              strokeDasharray="8 8" 
-              opacity="0.6"
+          {/* Sky layer for realistic atmosphere */}
+          <Layer
+            id="sky"
+            type="sky"
+            paint={{
+              "sky-type": "atmosphere",
+              "sky-atmosphere-sun": [0.0, 0.0],
+              "sky-atmosphere-sun-intensity": 15
+            }}
+          />
+
+          {/* Draw the Route Line on the ground */}
+          <Source id="route" type="geojson" data={curvedRoute}>
+            <Layer
+              id="route-layer"
+              type="line"
+              paint={{
+                "line-color": "#fde047",
+                "line-width": 4,
+                "line-opacity": 0.6,
+                "line-dasharray": [2, 2]
+              }}
             />
-            
-            <g ref={caravanRef} style={{ visibility: isVisible ? 'visible' : 'hidden' }}>
-              <circle cx="0" cy="-10" r="30" fill="#fde047" opacity="0.8">
-                <animate attributeName="r" values="30;45;30" dur="1.5s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.5;0.9;0.5" dur="1.5s" repeatCount="indefinite" />
-              </circle>
-              <circle cx="0" cy="-10" r="12" fill="#ffffff" style={{ filter: 'drop-shadow(0 0 8px white)' }} />
-              <text x="0" y="5" fontSize="40" textAnchor="middle" dominantBaseline="middle">{scene.icon}</text>
-            </g>
-          </svg>
-        </div>
+          </Source>
 
-        {/* HUD OVERLAY - Title & Subtitles */}
+          {/* Mecca POI */}
+          <Marker longitude={MECCA[0]} latitude={MECCA[1]} anchor="bottom">
+            <div 
+              className="flex flex-col items-center cursor-pointer hover:scale-110 transition-transform"
+              onClick={() => showInfo("مكة المكرمة", "البلد الحرام. المسافة إلى الطائف تزيد عن 100 كيلومتر عبر الجبال الوعرة.")}
+            >
+              <div className="text-4xl">🕋</div>
+              <div className="bg-black/70 px-3 py-1 rounded-full text-amber-400 font-bold text-sm mt-1 border border-amber-400/50">مكة المكرمة</div>
+            </div>
+          </Marker>
+
+          {/* Taif POI */}
+          <Marker longitude={TAIF[0]} latitude={TAIF[1]} anchor="bottom">
+            <div 
+              className="flex flex-col items-center cursor-pointer hover:scale-110 transition-transform"
+              onClick={() => showInfo("الطائف (ديار بني سعد)", "مدينة مرتفعة، وتتميز ببرودة طقسها وهواءها النقي. هنا حلت البركة بمقدم النبي ﷺ.")}
+            >
+              <div className="text-4xl">⛰️</div>
+              <div className="bg-black/70 px-3 py-1 rounded-full text-green-400 font-bold text-sm mt-1 border border-green-400/50">الطائف</div>
+            </div>
+          </Marker>
+
+          {/* Caravan Marker (10 Donkeys + 2 Camels) */}
+          <Marker longitude={caravanPos[0]} latitude={caravanPos[1]} anchor="center">
+            <div className="relative flex justify-center items-center">
+              {/* Glowing Aura */}
+              <div className="absolute w-24 h-24 bg-amber-400/30 rounded-full blur-xl animate-pulse"></div>
+              <div className="absolute w-12 h-12 bg-white/50 rounded-full blur-md"></div>
+              {/* Exactly 10 donkeys and 2 camels in a row/grid to represent the caravan */}
+              <div className="relative text-2xl drop-shadow-2xl bg-black/40 p-2 rounded-2xl border border-amber-400/30 backdrop-blur-sm flex flex-col items-center">
+                <div className="text-sm font-bold text-amber-300 mb-1">القافلة</div>
+                <div className="flex gap-1">
+                  <span>🫏🫏🫏🫏🫏</span>
+                </div>
+                <div className="flex gap-1">
+                  <span>🫏🫏🫏🫏🫏</span>
+                </div>
+                <div className="flex gap-1 mt-1">
+                  <span>🐫🐫</span>
+                </div>
+              </div>
+            </div>
+          </Marker>
+        </Map>
+      </div>
+
+      {/* HUD OVERLAY - Title & Subtitles */}
+      <div 
+        className="absolute top-10 w-full px-5 text-center transition-opacity duration-1000 z-20 pointer-events-none"
+      >
+        <h1 className="text-amber-400 font-extrabold text-3xl md:text-5xl mb-6 drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">رحلة النور إلى الطائف (3D)</h1>
         <div 
-          className="absolute top-10 w-full px-5 text-center transition-opacity duration-1000 z-20 pointer-events-none"
-          style={{ opacity: zoomStage === 2 ? 1 : 0 }}
+          className="text-white font-bold text-xl md:text-2xl min-h-[80px] bg-black/60 backdrop-blur-md p-4 rounded-xl border border-white/20 max-w-4xl mx-auto shadow-[0_0_30px_rgba(0,0,0,0.8)] transition-opacity duration-300"
+          style={{ opacity: opacity }}
         >
-          <h1 className="text-amber-400 font-extrabold text-3xl md:text-5xl mb-6 drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">{scene.title}</h1>
-          <div 
-            className="text-white font-bold text-xl md:text-2xl min-h-[80px] bg-black/60 backdrop-blur-sm p-4 rounded-xl border border-white/10 max-w-4xl mx-auto shadow-2xl transition-opacity duration-300"
-            style={{ opacity: opacity }}
-          >
-            {commentary}
-          </div>
+          {commentary}
         </div>
+      </div>
 
-        {/* BOTTOM CONTROLS OVERLAY */}
-        <div 
-          className="absolute bottom-10 w-full px-5 flex flex-col items-center gap-6 transition-opacity duration-1000 z-20"
-          style={{ opacity: zoomStage === 2 ? 1 : 0 }}
+      {/* BOTTOM CONTROLS OVERLAY */}
+      <div className="absolute bottom-10 w-full px-5 flex justify-center gap-4 z-20">
+        <button 
+          onClick={startJourney} 
+          className="px-8 py-4 bg-amber-600/90 backdrop-blur-md text-white rounded-full font-bold text-xl shadow-[0_0_20px_rgba(217,119,6,0.6)] hover:bg-amber-500 transition-colors border border-amber-400/50"
         >
-          {/* Main Actions */}
-          <div className="flex justify-center gap-4">
-            <button 
-              onClick={(e) => { e.stopPropagation(); startJourney(); }} 
-              className="px-8 py-3 bg-amber-600 text-white rounded-full font-bold text-lg shadow-lg hover:bg-amber-500 transition-colors"
-            >
-              ▶️ تشغيل المشهد
-            </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); resetJourney(); }} 
-              className="px-8 py-3 bg-black/50 border border-white/20 text-white rounded-full font-bold text-lg shadow-sm hover:bg-black/70 transition-colors"
-            >
-              🔄 إعادة المشهد
-            </button>
-          </div>
-
-          {/* Navigation */}
-          <div className="flex items-center gap-4 w-full max-w-4xl justify-between border-t border-white/20 pt-4">
-            <button 
-              onClick={(e) => { e.stopPropagation(); prevScene(); }}
-              disabled={currentSceneIndex === 0}
-              className={`px-6 py-2 rounded-lg font-bold transition-colors ${currentSceneIndex === 0 ? 'opacity-50 cursor-not-allowed bg-transparent text-gray-500' : 'bg-neutral-800 text-white hover:bg-neutral-700'}`}
-            >
-              ◀ المشهد السابق
-            </button>
-            <span className="text-neutral-400 font-mono">
-              مشهد {currentSceneIndex + 1} من {SCENES.length}
-            </span>
-            <button 
-              onClick={(e) => { e.stopPropagation(); nextScene(); }}
-              disabled={currentSceneIndex === SCENES.length - 1}
-              className={`px-6 py-2 rounded-lg font-bold transition-colors ${currentSceneIndex === SCENES.length - 1 ? 'opacity-50 cursor-not-allowed bg-transparent text-gray-500' : 'bg-amber-600 text-white hover:bg-amber-500 shadow-[0_0_15px_rgba(217,119,6,0.4)]'}`}
-            >
-              المشهد التالي ▶
-            </button>
-          </div>
-        </div>
-
+          ▶️ تحليق مع القافلة
+        </button>
+        <button 
+          onClick={resetJourney} 
+          className="px-8 py-4 bg-black/60 backdrop-blur-md border border-white/30 text-white rounded-full font-bold text-xl shadow-sm hover:bg-black/80 transition-colors"
+        >
+          🔄 إعادة
+        </button>
       </div>
 
       {/* Info Popup */}
       {infoPopup.show && (
         <div 
-          className="fixed z-50 bg-neutral-900 border border-amber-500 rounded-xl p-5 shadow-2xl max-w-sm pointer-events-none transform -translate-x-1/2 -translate-y-1/2"
-          style={{ left: infoPopup.x, top: infoPopup.y }}
+          className="absolute z-50 bg-black/80 backdrop-blur-lg border border-amber-500 rounded-xl p-6 shadow-2xl max-w-md transform -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2 text-center"
         >
-          <h3 className="text-amber-400 font-bold text-xl mb-2">{infoPopup.title}</h3>
-          <p className="text-white text-md leading-relaxed">{infoPopup.text}</p>
+          <h3 className="text-amber-400 font-bold text-2xl mb-3">{infoPopup.title}</h3>
+          <p className="text-white text-lg leading-relaxed">{infoPopup.text}</p>
+          <button 
+            className="mt-4 px-6 py-2 bg-neutral-700 hover:bg-neutral-600 rounded-lg font-bold text-white transition-colors"
+            onClick={() => setInfoPopup({...infoPopup, show: false})}
+          >
+            إغلاق
+          </button>
         </div>
       )}
 
